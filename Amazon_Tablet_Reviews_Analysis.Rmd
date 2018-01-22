@@ -1,0 +1,193 @@
+---
+title: "Amazon Tablet Reviews Analysis"
+author: "Batul Arsiwala"
+date: "March 10, 2017"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                       warning=FALSE, message=FALSE)
+```
+
+```{r}
+
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(reshape2)
+library(magrittr)
+library(tm)
+library(koRpus)
+library(textclean) 
+library(ANLP)
+library(slam)
+library(wordcloud)
+library(ggplot2)
+library(repr)
+```
+
+#Analysis of the Tablet reviews obtained from Amazon
+
+#Data Loading
+
+```{r}
+rd = read.csv("C:/Users/Murtaza/Desktop/SCU NOTES/Machine Learning/ML_Project/Project files/amazon_reviews.csv",na.strings=c("","NA"))
+
+# Lets look at the shape of the dataset
+dim(rd)
+
+# Column names
+colnames(rd)
+```
+
+As we can see the dataset consists of 40,741 reviews of all different types of Tablets available on Amazon.
+
+#Extracting top feature of tablets from all reviews
+
+```{r}
+# Creating a lexicon for tablet features
+tablet_lexicon = c()
+
+##Attaching words associated with weight 
+weight = c("weight", "heavy", "light", "portable", "portability", "lightweight", "size", "small", "carry","compact","pocketsized","pocketsize")
+
+##Attaching words associated with Display & Media 
+display_media = c("display", "screen", "widescreen", "touch", "video", "resolution", "brightness", "audio","bright","touchscreen","graphics","graphic")
+
+##Attaching words associated with Processor
+processor = c("processor", "speed", "lag", "lags", "slow", "fast", "core", "blazing","performance")
+
+##Attaching words associated with Storage and Memory
+storage_memory = c("memory-space", "memory", "storage","ram","space","capacity")
+
+###Attaching words associated with Camera
+camera = c("camera", "picture", "pixel", "pixels", "webcam", "front", "back", "rear", "flash", "zoom","images","photo")
+
+###Attaching words associated with Wirelss
+wireless = c("wireless", "3g", "4g", "connectivity", "broadband", "bluetooth", "network", "wifi", "sim", "dual", "dualsim")
+
+###Attaching words associated with Price
+price = c("price", "overpriced", "exhorbitant", "expensive", "cheap", "affordable", "economical", "warranty","guarantee")
+
+###Attaching words associated with OS
+os = c("os", "operating", "android", "ios", "windows","userfriendly","blackberry","windows")
+
+###Attaching words associated with Battery
+battery = c("battery", "batterylife", "recharge", "drain", "drains", "day", "ram")
+
+###Attaching words associated with Aesthtics & Accessibility
+aesthetics = c("design", "quality", "shape", "keyboard", "interface", "easy", "ease", "handle", "fits", "fit", "backlight", "durable", "rugged", "break", "breaks", "fragile", "crack", "cracks","picturequaqlity")
+
+##Attaching words associated with Usage
+usage= c("read", "reading", "book", "books", "watch", "watching", "movies", "stream", "streaming", "music", "surf", "browse","game","gaming","listening","listen","downloading","download","email")
+
+tablet_lexicon= c(weight,display_media,processor,storage_memory,camera,wireless,price,os,battery,aesthetics,usage)
+
+# Combining title and content together
+Review <-paste(rd$Title, rd$Content, sep = " ")
+Review <- tolower(Review)
+
+#Creating a corpus of the reviews and removing stopwords and punctuation and numbers
+review <- Corpus(VectorSource(Review))
+temp = tm_map(review,removeWords,stopwords("english"))
+temp = tm_map(review,removePunctuation)
+temp = tm_map(temp,removeNumbers)
+
+# Converting the corpus into a TDM
+review <- TermDocumentMatrix(temp,control=list(minWordLength=1))
+
+#Calculating sum to get the totalk frequency of the words
+review_sum = rollup(review, 2, na.rm=TRUE, FUN = sum)
+review_sum_df = as.data.frame(as.matrix(review_sum))
+names(review_sum_df)= c("Frequency")
+review_sum_df$words<-rownames(review_sum_df)
+
+# Extracting the frequency for the words in the tablet lexicon created
+tablet_features = review_sum_df[review_sum_df$words %in% tablet_lexicon,]
+feature = c()
+x = ""
+for (i in 1:length(tablet_features$words)){
+  if (tablet_features$words[i] %in% weight){x = "weight"}
+  else if (tablet_features$words[i] %in% display_media){x ="display & media"}
+  else if (tablet_features$words[i] %in% processor){x = "processor"}
+  else if (tablet_features$words[i] %in% storage_memory){x = "storage & memory"}
+  else if (tablet_features$words[i] %in% camera){x = "camera"}
+  else if (tablet_features$words[i] %in% wireless){x ="wireless"}
+  else if (tablet_features$words[i] %in% price){x = "price"}
+  else if (tablet_features$words[i] %in% os){x = "os"}
+  else if (tablet_features$words[i] %in% battery){x = "battery"}
+  else if (tablet_features$words[i] %in% aesthetics){x = "aesthetics"}
+  else if (tablet_features$words[i] %in% usage){x= "usage"}
+  feature = c(feature,x)
+}
+tablet_features$feature = feature 
+
+tablet_features$weight = ifelse(tablet_features$feature == "weight",tablet_features$Frequency,0)
+tablet_features$display_media = ifelse(tablet_features$feature == "display & media",tablet_features$Frequency,0)
+tablet_features$processor = ifelse(tablet_features$feature == "processor",tablet_features$Frequency,0)
+tablet_features$storage_memory = ifelse(tablet_features$feature == "storage & memory",tablet_features$Frequency,0)
+tablet_features$camera = ifelse(tablet_features$feature == "camera",tablet_features$Frequency,0)
+tablet_features$wireless = ifelse(tablet_features$feature == "wireless",tablet_features$Frequency,0)
+tablet_features$price = ifelse(tablet_features$feature == "price",tablet_features$Frequency,0)
+tablet_features$os = ifelse(tablet_features$feature == "os",tablet_features$Frequency,0)
+tablet_features$battery = ifelse(tablet_features$feature == "battery",tablet_features$Frequency,0)
+tablet_features$aesthetics = ifelse(tablet_features$feature == "aesthetics",tablet_features$Frequency,0)
+tablet_features$usage = ifelse(tablet_features$feature == "usage",tablet_features$Frequency,0)
+
+```
+
+# Ranking the features  and finding the top 20
+```{r}
+tablet_features_2 = tablet_features[order(tablet_features$Frequency,decreasing = TRUE),]
+top_20 = tablet_features_2[1:20,c(1,2)]
+```
+
+
+# Plotting the top 20 features
+```{r}
+par(mfrow = c(1,1))
+top_20$words <-factor(top_20$words, levels=top_20[order(top_20$Frequency), "words"])
+top_features <- ggplot(top_20,aes(x = words , y = Frequency))
+top_features <- top_features + geom_bar(stat = "identity") + coord_flip() +
+  labs(title = "Top Features")
+top_features
+```
+
+
+#Wordcloud of all the features
+```{r}
+par(mfrow = c(1,1))
+pal2 <- brewer.pal(8,"Dark2")
+wordcloud(tablet_features_2$words,tablet_features_2$Frequency, scale=c(8,.2),min.freq=3,
+max.words=100, random.order=FALSE, rot.per=.15, colors=pal2)
+```
+
+
+#Wordcloud of individual product characteristics
+
+The below code plots a wordcloud for each of the tablet feature, highlighting the most frequent word associated with each fetaure.
+```{r}
+# Change plot size to 4 x 3
+options(repr.plot.width=9, repr.plot.height=9)
+par(mfrow = c(4,3))
+
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,4]), col = "red")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,5]), col ="blue")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,6]), col ="lightseagreen")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,7]), col= "orange")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,8]), col ="purple")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,9]), col = "hotpink")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,10]), col ="chocolate")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,11]), col ="deeppink3")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,12]), col = "darkturquoise")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,13]), col ="darkmagenta")
+wordcloud(tablet_features_2[1:115,2],as.numeric(tablet_features_2[1:115,14]), col ="forestgreen")
+
+product_categories = data.frame(Attributes = c("Weight","Display & Media","Processor","Storage & Memory", "Camera","Wireless","Price","os","Battery","Aesthetics","Usage"), Weights = c(10:20))
+
+pal2 <- brewer.pal(8,"Dark2")
+wordcloud(product_categories$Attributes,product_categories$Weights, scale=c(8,.2),min.freq=3,
+max.words=Inf, random.order=FALSE, rot.per=.15, colors=pal2)
+```
+
